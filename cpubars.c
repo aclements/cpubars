@@ -31,6 +31,12 @@
         (__a < __b) ? __a : __b;                \
         })
 
+#define MAX(a, b) ({                            \
+        __typeof__(a) __a = (a);                \
+        __typeof__(b) __b = (b);                \
+        (__a > __b) ? __a : __b;                \
+        })
+
 #define SWAP(a, b) ({                           \
         __typeof__(a) __a = (a);                \
         (a) = (b);                              \
@@ -547,7 +553,7 @@ ui_layout(struct cpustats *cpus)
         if ((length + 1) * cpus->online < w) {
                 // Lay out the labels horizontally
                 ui_panes[0].start = 1;
-                ui_bar_length = LINES - ui_panes[0].start - 2;
+                ui_bar_length = MAX(0, LINES - ui_panes[0].start - 2);
                 label_len = 1;
                 putp(tiparm(cursor_address, LINES, 0));
                 int bar = 1;
@@ -563,14 +569,13 @@ ui_layout(struct cpustats *cpus)
                 // Lay out the labels vertically
                 int pad = 0, count = cpus->online;
                 ui_panes[0].start = length;
-                ui_bar_length = LINES - ui_panes[0].start - 2;
+                ui_bar_length = MAX(0, LINES - ui_panes[0].start - 2);
                 label_len = length;
 
-                // XXX Making the terminal to small will crash this
                 if (cpus->online * 2 < w) {
                         // We have space for padding
                         pad = 1;
-                } else if (cpus->online >= w) {
+                } else if (cpus->online >= w && COLS >= 2) {
                         // We don't have space for all of them
                         int totalw = 4 + cpus->online;
                         ui_init_panes((totalw + COLS - 2) / (COLS - 1));
@@ -581,7 +586,7 @@ ui_layout(struct cpustats *cpus)
                                 ui_panes[i].barpos = i * (COLS - 1);
                                 ui_panes[i].width = COLS - 1;
                         }
-                        ui_bar_length = plength - length;
+                        ui_bar_length = MAX(0, plength - length);
                 }
 
                 int bar = 1;
