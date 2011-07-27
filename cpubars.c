@@ -211,6 +211,10 @@ cpustats_alloc(void)
 void
 cpustats_read(struct cpustats *out)
 {
+        // On kernels prior to 2.6.37, this can take a long time on
+        // large systems because updating IRQ counts is slow.  See
+        //   https://lkml.org/lkml/2010/9/29/259
+
         int i;
         for (i = 0; i < cpustats_cpus; i++)
                 out->cpus[i].online = false;
@@ -787,7 +791,7 @@ int
 main(int argc, char **argv)
 {
         bool force_ascii = false;
-        int delay = 1000;
+        int delay = 500;
 
         int opt;
         while ((opt = getopt(argc, argv, "ad:h")) != -1) {
@@ -818,7 +822,10 @@ main(int argc, char **argv)
                                         "  -a       Use ASCII-only bars (instead of Unicode)\n"
                                         "  -d SECS  Specify delay between updates (decimals accepted)\n"
                                         "\n"
-                                        "If your bars look funky, use -a or specify LANG=C.\n");
+                                        "If your bars look funky, use -a or specify LANG=C.\n"
+                                        "\n"
+                                        "For kernels prior to 2.6.37, using a small delay on a large system can\n"
+                                        "induce significant system time overhead.\n");
                                 exit(0);
                         }
                         exit(2);
