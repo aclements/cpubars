@@ -650,12 +650,6 @@ ui_compute_bars(struct cpustats *delta)
                                 UIXY(ui_back, barpos, len) =
                                         stat_info[topStat[1]].color;
                         }
-
-                        /* 
-                         * if (biggestStat < NSTATS)
-                         *         UIXY(ui_back, barpos, len) =
-                         *                 stat_info[biggestStat].color;
-                         */
                 }
 
                 // Copy across bar length
@@ -666,23 +660,6 @@ ui_compute_bars(struct cpustats *delta)
                                &UIXY(ui_fore, barpos, 0), bar_length);
                         memcpy(&UIXY(ui_back, barpos+i, 0),
                                &UIXY(ui_back, barpos, 0), bar_length);
-                }
-        }
-}
-
-void
-ui_show_bars_dumb(void)
-{
-        int row, col;
-        for (row = 0; row < bar_length; row++) {
-                putp(tiparm(cursor_address, bar_length - row, 0));
-                for (col = 0; col < bar_maxpos; col++) {
-                        int back = UIXY(ui_back, col, row);
-                        if (back == 0xff)
-                                putp(exit_attribute_mode);
-                        else
-                                putp(tiparm(set_a_background, back));
-                        fputs(cell_chars[UIXY(ui_display, col, row)], stdout);
                 }
         }
 }
@@ -765,24 +742,6 @@ main(int argc, char **arv)
         sigaction(SIGINT, &sa, NULL);
 
         cpustats_init();
-
-        /* 
-         * struct cpustats *st = cpustats_alloc();
-         * int i;
-         * while (!need_exit) {
-         *         cpustats_read(st);
-         *         printf("\n%llu\n", st->real);
-         *         for (i = 0; i < maxCpus; i++) {
-         *                 if (!st->cpus[i].online)
-         *                         continue;
-         *                 printf("%d %llu %llu %llu %llu %llu %llu\n",
-         *                        i, st->cpus[i].user, st->cpus[i].nice,
-         *                        st->cpus[i].sys, st->cpus[i].iowait,
-         *                        st->cpus[i].irq, st->cpus[i].softirq);
-         *         }
-         *         sleep(1);
-         * }
-         */
 
         term_init();
         ui_init();
