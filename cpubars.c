@@ -416,7 +416,22 @@ static const struct ui_stat
 };
 #define NSTATS (sizeof(ui_stats)/sizeof(ui_stats[0]) - 1)
 
-struct ui_bar
+// If we have too many bars to fit on the screen, we divide the screen
+// into "panes".  Wrapping the display into these panes is handled by
+// the final output routine.
+static struct ui_pane
+{
+        // start is the "length dimension" of the start of this pane
+        // (for vertical bars, the row, relative to the bottom).
+        // barpos is the first barpos that appears in this pane (for
+        // vertical bars, the column).  width is the size of this pane
+        // in the width dimension (for vertical bars, the number of
+        // columns).
+        int start, barpos, width;
+} *ui_panes;
+static int ui_num_panes;
+
+static struct ui_bar
 {
         int start, width, cpu;
 } *ui_bars;
@@ -479,6 +494,16 @@ ui_init(bool force_ascii)
 #endif
 }
 
+static void
+ui_init_panes(int n)
+{
+        free(ui_panes);
+        ui_num_panes = n;
+        if (!(ui_panes = malloc(n * sizeof *ui_panes)))
+                epanic("out of memory");
+        
+}
+
 void
 ui_layout(struct cpustats *cpus)
 {
@@ -496,6 +521,10 @@ ui_layout(struct cpustats *cpus)
                 printf(" %s ", si->name);
         }
 
+        // Create one pane by default
+        ui_init_panes(1);
+        ui_panes[0].barpos = 0;
+
         // Create bar info
         free(ui_bars);
         ui_num_bars = cpus->online + 1;
@@ -512,17 +541,18 @@ ui_layout(struct cpustats *cpus)
         char buf[16];
         snprintf(buf, sizeof buf, "%d", cpus->max);
         int length = strlen(buf);
-        int w = COLS - 3;
+        int label_len;
+        int w = COLS - 4;
 
         if ((length + 1) * cpus->online < w) {
-                // Lay out and draw labels horizontally
-                ui_bar_length = LINES - 3;
+                // Lay out the labels horizontally
+                ui_panes[0].start = 1;
+                ui_bar_length = LINES - ui_panes[0].start - 2;
+                label_len = 1;
                 putp(tiparm(cursor_address, LINES, 0));
-                printf("avg");
                 int bar = 1;
                 for (i = 0; i <= cpus->max; ++i) {
                         if (cpus->cpus[i].online) {
-                                printf(" %*d", length, i);
                                 ui_bars[bar].start = 4 + (bar-1)*(length+1);
                                 ui_bars[bar].width = length;
                                 ui_bars[bar].cpu = i;
@@ -532,13 +562,26 @@ ui_layout(struct cpustats *cpus)
         } else {
                 // Lay out the labels vertically
                 int pad = 0, count = cpus->online;
-                ui_bar_length = LINES - 2 - length;
+                ui_panes[0].start = length;
+                ui_bar_length = LINES - ui_panes[0].start - 2;
+                label_len = length;
+
+                // XXX Making the terminal to small will crash this
                 if (cpus->online * 2 < w) {
                         // We have space for padding
                         pad = 1;
                 } else if (cpus->online >= w) {
-                        // We don't even have space for all of them
-                        ui_num_bars = w - 1;
+                        // We don't have space for all of them
+                        int totalw = 4 + cpus->online;
+                        ui_init_panes((totalw + COLS - 2) / (COLS - 1));
+                        int plength = (LINES - 2) / ui_num_panes;
+                        for (i = 0; i < ui_num_panes; ++i) {
+                                ui_panes[i].start =
+                                        (ui_num_panes-i-1) * plength + length;
+                                ui_panes[i].barpos = i * (COLS - 1);
+                                ui_panes[i].width = COLS - 1;
+                        }
+                        ui_bar_length = plength - length;
                 }
 
                 int bar = 1;
@@ -549,21 +592,6 @@ ui_layout(struct cpustats *cpus)
                                 ui_bars[bar].cpu = i;
                                 bar++;
                         }
-                }
-
-                // Draw vertical labels
-                putp(tiparm(cursor_address, LINES - length, 0));
-                int row;
-                for (row = 0; row < length; ++row) {
-                        printf(row == 0 ? "avg" : "   ");
-                        for (bar = 1; bar < ui_num_bars; ++bar) {
-                                i = snprintf(buf, sizeof buf, "%d", ui_bars[bar].cpu);
-                                if (pad || bar == 1)
-                                        putchar(' ');
-                                putchar(row < i ? buf[row] : ' ');
-                        }
-                        if (row != length - 1)
-                                putchar('\n');
                 }
         }
 
@@ -584,6 +612,44 @@ ui_layout(struct cpustats *cpus)
                 memset(ui_display, 0, ui_bar_length * ui_bar_width);
                 memset(ui_fore, 0xff, ui_bar_length * ui_bar_width);
         }
+
+        // Trim down the last pane to the right width
+        ui_panes[ui_num_panes - 1].width =
+                ui_bar_width - ui_panes[ui_num_panes - 1].barpos;
+
+        // Draw labels
+        char *label_buf = malloc(ui_bar_width * label_len);
+        if (!label_buf)
+                epanic("out of memory");
+        memset(label_buf, ' ', ui_bar_width * label_len);
+        int bar;
+        for (bar = 0; bar < ui_num_bars; ++bar) {
+                char *out = &label_buf[ui_bars[bar].start];
+                int len;
+                if (bar == 0) {
+                        strcpy(buf, "avg");
+                        len = 3;
+                } else
+                        len = snprintf(buf, sizeof buf, "%d", ui_bars[bar].cpu);
+                if (label_len == 1 || bar == 0)
+                        memcpy(out, buf, len);
+                else
+                        for (i = 0; i < len; i++)
+                                out[i * ui_bar_width] = buf[i];
+        }
+        for (i = 0; i < ui_num_panes; ++i) {
+                putp(tiparm(cursor_address, LINES - ui_panes[i].start, 0));
+
+                int row;
+                for (row = 0; row < label_len; ++row) {
+                        if (row > 0)
+                                putchar('\n');
+                        fwrite(&label_buf[row*ui_bar_width + ui_panes[i].barpos],
+                               1, ui_panes[i].width, stdout);
+                }
+        }
+        free(label_buf);
+
 }
 
 void
@@ -655,6 +721,7 @@ ui_compute_bars(struct cpustats *delta)
                         int topStat[2] = {0, 0};
                         int topVal[2] = {-1, -1};
                         for (; stat < NSTATS + 1; stat++) {
+                                // XXX Wrong.  Want size, not height.
                                 int val = MIN(cutoff[stat] - lo, subcells);
                                 if (val > topVal[0]) {
                                         topStat[1] = topStat[0];
@@ -718,24 +785,25 @@ ui_compute_bars(struct cpustats *delta)
         }
 }
 
-void
-ui_show_bars(void)
+static void
+ui_show_pane(struct ui_pane *pane)
 {
         int row, col;
         int lastBack = -1, lastFore = -1;
         for (row = 0; row < ui_bar_length; row++) {
-                putp(tiparm(cursor_address, ui_bar_length - row + 1, 0));
+                putp(tiparm(cursor_address, LINES - pane->start - row - 1, 0));
 
                 // What's the width of this row?  Beyond this, we can
                 // just clear the line.
-                int width = 0;
-                for (col = 0; col < ui_bar_width; col++) {
+                int endCol = 0;
+                for (col = pane->barpos; col < pane->barpos + pane->width;
+                     col++) {
                         if (UIXY(ui_back, col, row) != 0xff ||
                             UIXY(ui_display, col, row) != 0)
-                                width = col + 1;
+                                endCol = col + 1;
                 }
 
-                for (col = 0; col < width; col++) {
+                for (col = pane->barpos; col < endCol; col++) {
                         int cell = UIXY(ui_display, col, row);
                         int back = UIXY(ui_back, col, row);
                         int fore = UIXY(ui_fore, col, row);
@@ -765,7 +833,7 @@ ui_show_bars(void)
                 }
 
                 // Clear to the end of the line
-                if (width < ui_bar_width) {
+                if (endCol < pane->barpos + pane->width) {
                         if (lastBack != 0xff || lastFore != 0xff) {
                                 putp(exit_attribute_mode);
                                 lastBack = lastFore = 0xff;
@@ -773,6 +841,14 @@ ui_show_bars(void)
                         putp(clr_eol);
                 }
         }
+}
+
+void
+ui_show_bars(void)
+{
+        int pane;
+        for (pane = 0; pane < ui_num_panes; ++pane)
+                ui_show_pane(&ui_panes[pane]);
 }
 
 /******************************************************************
