@@ -391,7 +391,10 @@ struct stat_info
         FIELD(nice, COLOR_GREEN), FIELD(user, COLOR_BLUE),
         FIELD(sys, COLOR_RED), FIELD(iowait, COLOR_CYAN),
         FIELD(irq, COLOR_MAGENTA), FIELD(softirq, COLOR_YELLOW),
-        {}
+        // We set the color of the sentinel stat to 0xff so we can
+        // safely refer to stat_info[NSTATS].color as the last, "idle"
+        // segment of a bar.
+        {NULL, 0xff, 0}
 #undef FIELD
 };
 #define NSTATS 6
