@@ -568,9 +568,20 @@ ui_compute_bars(struct cpustats *delta)
                 struct cpustat *cpu = bar_info[bar].cpu == -1 ? &delta->avg :
                         &delta->cpus[bar_info[bar].cpu];
 
-                // Calculate cut-offs
-                enum { subcells = 100 };
-                int scale = delta->real * (bar_info[bar].cpu == -1 ? delta->online : 1);
+                // Calculate cut-offs between segments.  We divide
+                // each display cell into `subcells' steps so we can
+                // use integer math.
+                enum { subcells = 256 };
+                // Values in delta are from 0 to `scale'.  For per-CPU
+                // bars this is just the real time, but for the
+                // average bar, it's multiplied by the number of
+                // online CPU's.
+                int scale = delta->real;
+                if (bar_info[bar].cpu == -1)
+                        scale *= delta->online;
+                // To simplify the code, we include one additional
+                // cutoff fixed at the very top of the bar so we can
+                // treat the empty region above the bar as a segment.
                 int cutoff[NSTATS + 1];
                 unsigned long long cumm = 0;
                 for (i = 0; i < NSTATS; i++) {
@@ -585,14 +596,14 @@ ui_compute_bars(struct cpustats *delta)
                 for (len = stat = 0; len < bar_length && stat < NSTATS; len++) {
                         int lo = len * subcells, hi = (len + 1) * subcells;
                         if (cutoff[stat] >= hi) {
-                                // Cell is covered by this stat
+                                // Cell is entirely covered
                                 UIXY(ui_back, barpos, len) =
                                         stat_info[stat].color;
                                 continue;
                         }
 
-                        // Find the two biggest covers of this cell
-                        // (including no-stat)
+                        // Find the two segments the cover this cell
+                        // the most
                         int topStat[2] = {0, 0};
                         int topVal[2] = {-1, -1};
                         for (; stat < NSTATS + 1; stat++) {
@@ -613,7 +624,7 @@ ui_compute_bars(struct cpustats *delta)
                                 panic("bug: topVal={%d,%d}",
                                       topVal[0], topVal[1]);
 
-                        // Order the values by stat so we put the
+                        // Order the segments by stat so we put the
                         // earlier stat on the bottom
                         if (topStat[0] > topStat[1]) {
                                 SWAP(topStat[0], topStat[1]);
