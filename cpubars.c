@@ -682,13 +682,11 @@ ui_compute_bars(struct cpustats *delta)
                         int cell = topVal[0] * NCHARS / (topVal[0] + topVal[1]);
 
                         // Fill the cell
-                        if (cell == 0) {
+                        if (cell == NCHARS - 1) {
+                                // We leave this as a space, which
+                                // means the color roles are reversed
                                 UIXY(ui_back, barpos, len) =
                                         ui_stats[topStat[0]].color;
-                        } else if (cell == NCHARS - 1) {
-                                // We leave this as a space
-                                UIXY(ui_back, barpos, len) =
-                                        ui_stats[topStat[1]].color;
                         } else {
                                 UIXY(ui_display, barpos, len) = cell;
                                 UIXY(ui_fore, barpos, len) =
