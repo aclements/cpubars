@@ -514,7 +514,7 @@ ui_layout(struct cpustats *cpus)
                 for (i = 0; i <= cpus->max; ++i) {
                         if (cpus->cpus[i].online) {
                                 printf(" %*d", length, i);
-                                ui_bars[bar].start = 4 + i*(length+1);
+                                ui_bars[bar].start = 4 + (bar-1)*(length+1);
                                 ui_bars[bar].width = length;
                                 ui_bars[bar].cpu = i;
                                 bar++;
