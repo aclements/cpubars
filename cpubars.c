@@ -388,8 +388,9 @@ struct stat_info
         int offset;
 } stat_info[] = {
 #define FIELD(name, color) {#name, color, offsetof(struct cpustat, name)}
-        FIELD(nice, 2), FIELD(user, 1), FIELD(sys, 4),
-        FIELD(iowait, 3), FIELD(irq, 5), FIELD(softirq, 6),
+        FIELD(nice, COLOR_GREEN), FIELD(user, COLOR_BLUE),
+        FIELD(sys, COLOR_RED), FIELD(iowait, COLOR_CYAN),
+        FIELD(irq, COLOR_MAGENTA), FIELD(softirq, COLOR_YELLOW),
         {}
 #undef FIELD
 };
@@ -450,7 +451,7 @@ ui_layout(struct cpustats *cpus)
         // Draw key at the top
         struct stat_info *si;
         for (si = stat_info; si->name; si++) {
-                putp(tiparm(set_background, si->color));
+                putp(tiparm(set_a_background, si->color));
                 printf("  ");
                 putp(exit_attribute_mode);
                 printf(" %s ", si->name);
@@ -548,7 +549,7 @@ ui_show_load(float load[3])
                  load[0], load[1], load[2]);
         putp(tiparm(cursor_address, 0, COLS - strlen(buf) - 8));
         putp(exit_attribute_mode);
-        putp(tiparm(set_foreground, 7));
+        putp(tiparm(set_a_foreground, COLOR_WHITE));
         printf("  load: ");
         putp(exit_attribute_mode);
         printf(buf);
@@ -680,7 +681,7 @@ ui_show_bars_dumb(void)
                         if (back == 0xff)
                                 putp(exit_attribute_mode);
                         else
-                                putp(tiparm(set_background, back));
+                                putp(tiparm(set_a_background, back));
                         fputs(cell_chars[UIXY(ui_display, col, row)], stdout);
                 }
         }
@@ -720,11 +721,11 @@ ui_show_bars(void)
                                         lastBack = lastFore = 0xff;
                                 }
                                 if (lastBack != back) {
-                                        putp(tiparm(set_background, back));
+                                        putp(tiparm(set_a_background, back));
                                         lastBack = back;
                                 }
                                 if (lastFore != fore) {
-                                        putp(tiparm(set_foreground, fore));
+                                        putp(tiparm(set_a_foreground, fore));
                                         lastFore = fore;
                                 }
                         }
