@@ -390,11 +390,6 @@ struct stat_info
 #define FIELD(name, color) {#name, color, offsetof(struct cpustat, name)}
         FIELD(nice, 2), FIELD(user, 1), FIELD(sys, 4),
         FIELD(iowait, 3), FIELD(irq, 5), FIELD(softirq, 6),
-        /* 
-         * {"nice", 2, offsetof(struct cpustat, nice)},
-         * {"user", 1}, {"sys", 4},
-         * {"iowait", 3}, {"irq", 5}, {"softirq", 6},
-         */
         {}
 #undef FIELD
 };
@@ -416,9 +411,33 @@ int bar_count;
 //         1
 //         2 |--bar--|
 int bar_length, bar_maxpos;
-// XXX This won't work with variable-length UTF-8 characters
+// ui_display, ui_fore, and ui_back are 2-D arrays that should be
+// indexed using UIXY.  ui_display stores indexes into cell_chars.
+// ui_fore and ui_back store color codes or 0xff for default
+// attributes.
 unsigned char *ui_display, *ui_fore, *ui_back;
 #define UIXY(array, barpos, len) (array[barpos*bar_length + len])
+
+#define NCHARS 10
+char cell_chars[NCHARS][4];
+
+void
+ui_init(void)
+{
+        // XXX Check if locale supports UTF-8
+        // XXX Fall back to ASCII bars
+        // UTF-8 encode cell characters
+        int ch;
+        for (ch = 0; ch < NCHARS; ch++) {
+                if (ch == 0 || ch == NCHARS - 1) {
+                        strcpy(cell_chars[ch], " ");
+                } else {
+                        // \u2581 - \u2589
+                        strcpy(cell_chars[ch], "\xe2\x96\x80");
+                        cell_chars[ch][2] += ch;
+                }
+        }
+}
 
 void
 ui_layout(struct cpustats *cpus)
@@ -539,7 +558,7 @@ void
 ui_compute_bars(struct cpustats *delta)
 {
         // XXX ui_display and ui_fore are fixed with ASCII-only bars
-        memset(ui_display, ' ', bar_length * bar_maxpos);
+        memset(ui_display, 0, bar_length * bar_maxpos);
         memset(ui_fore, 0xff, bar_length * bar_maxpos);
         memset(ui_back, 0xff, bar_length * bar_maxpos);
 
@@ -572,21 +591,59 @@ ui_compute_bars(struct cpustats *delta)
                                 continue;
                         }
 
-                        // Find the biggest cover of this cell
-                        // (possibly empty)
-                        int biggestStat = stat, biggestVal = 0;
+                        // Find the two biggest covers of this cell
+                        // (including no-stat)
+                        int topStat[2] = {0, 0};
+                        int topVal[2] = {-1, -1};
                         for (; stat < NSTATS + 1; stat++) {
                                 int val = MIN(cutoff[stat] - lo, subcells);
-                                if (val > biggestVal) {
-                                        biggestVal = val;
-                                        biggestStat = stat;
+                                if (val > topVal[0]) {
+                                        topStat[1] = topStat[0];
+                                        topVal[1] = topVal[0];
+                                        topStat[0] = stat;
+                                        topVal[0] = val;
+                                } else if (val > topVal[1]) {
+                                        topStat[1] = stat;
+                                        topVal[1] = val;
                                 }
                                 if (cutoff[stat] >= hi)
                                         break;
                         }
-                        if (biggestStat < NSTATS)
+                        if (topVal[0] == -1 || topVal[1] == -1)
+                                panic("bug: topVal={%d,%d}",
+                                      topVal[0], topVal[1]);
+
+                        // Order the values by stat so we put the
+                        // earlier stat on the bottom
+                        if (topStat[0] > topStat[1]) {
+                                SWAP(topStat[0], topStat[1]);
+                                SWAP(topVal[0], topVal[1]);
+                        }
+
+                        // Re-scale and choose a split
+                        int cell = topVal[0] * NCHARS / (topVal[0] + topVal[1]);
+
+                        // Fill the cell
+                        if (cell == 0) {
                                 UIXY(ui_back, barpos, len) =
-                                        stat_info[biggestStat].color;
+                                        stat_info[topStat[0]].color;
+                        } else if (cell == NCHARS - 1) {
+                                // We leave this as a space
+                                UIXY(ui_back, barpos, len) =
+                                        stat_info[topStat[1]].color;
+                        } else {
+                                UIXY(ui_display, barpos, len) = cell;
+                                UIXY(ui_fore, barpos, len) =
+                                        stat_info[topStat[0]].color;
+                                UIXY(ui_back, barpos, len) =
+                                        stat_info[topStat[1]].color;
+                        }
+
+                        /* 
+                         * if (biggestStat < NSTATS)
+                         *         UIXY(ui_back, barpos, len) =
+                         *                 stat_info[biggestStat].color;
+                         */
                 }
 
                 // Copy across bar length
@@ -613,7 +670,7 @@ ui_show_bars_dumb(void)
                                 putp(exit_attribute_mode);
                         else
                                 putp(tiparm(set_background, back));
-                        putchar(UIXY(ui_display, col, row));
+                        fputs(cell_chars[UIXY(ui_display, col, row)], stdout);
                 }
         }
 }
@@ -622,37 +679,55 @@ void
 ui_show_bars(void)
 {
         int row, col;
-        int lastBack = -1;
+        int lastBack = -1, lastFore = -1;
         for (row = 0; row < bar_length; row++) {
                 putp(tiparm(cursor_address, bar_length - row, 0));
-                for (col = 0; col < bar_maxpos;) {
+
+                // What's the width of this row?  Beyond this, we can
+                // just clear the line.
+                int width = 0;
+                for (col = 0; col < bar_maxpos; col++) {
+                        if (UIXY(ui_back, col, row) != 0xff ||
+                            UIXY(ui_display, col, row) != 0)
+                                width = col + 1;
+                }
+
+                for (col = 0; col < width; col++) {
+                        int cell = UIXY(ui_display, col, row);
                         int back = UIXY(ui_back, col, row);
+                        int fore = UIXY(ui_fore, col, row);
 
-                        // Get a run of equivalent attributes
-                        int end;
-                        bool clearRun = (back == 0xff);
-                        for (end = col; end < bar_maxpos; ++end) {
-                                clearRun = clearRun &&
-                                        UIXY(ui_display, end, row) == ' ';
-                                if (UIXY(ui_back, end, row) != back)
-                                        break;
-                        }
+                        // If it's a space, we don't care what the
+                        // foreground color is.
+                        if (cell_chars[cell][0] == ' ' && lastFore != -1)
+                                fore = lastFore;
 
-                        // Draw run
-                        if (lastBack != back) {
-                                if (back == 0xff)
+                        // Set attributes
+                        if (lastBack != back || lastFore != fore) {
+                                if (back == 0xff || fore == 0xff) {
                                         putp(exit_attribute_mode);
-                                else
+                                        lastBack = lastFore = 0xff;
+                                }
+                                if (lastBack != back) {
                                         putp(tiparm(set_background, back));
-                                lastBack = back;
+                                        lastBack = back;
+                                }
+                                if (lastFore != fore) {
+                                        putp(tiparm(set_foreground, fore));
+                                        lastFore = fore;
+                                }
                         }
-                        if (clearRun && end == bar_maxpos) {
-                                // Just clear the rest of the row
-                                putp(clr_eol);
-                                break;
+
+                        fputs(cell_chars[cell], stdout);
+                }
+
+                // Clear to the end of the line
+                if (width < bar_maxpos) {
+                        if (lastBack != 0xff || lastFore != 0xff) {
+                                putp(exit_attribute_mode);
+                                lastBack = lastFore = 0xff;
                         }
-                        fwrite(&UIXY(ui_display, col, row), 1, end-col, stdout);
-                        col = end;
+                        putp(clr_eol);
                 }
         }
 }
@@ -698,6 +773,7 @@ main(int argc, char **arv)
          */
 
         term_init();
+        ui_init();
 
         struct cpustats *before = cpustats_alloc(),
                 *after = cpustats_alloc(),
