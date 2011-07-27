@@ -720,9 +720,9 @@ ui_compute_bars(struct cpustats *delta)
                         // the most
                         int topStat[2] = {0, 0};
                         int topVal[2] = {-1, -1};
+                        int val = lo;
                         for (; stat < NSTATS + 1; stat++) {
-                                // XXX Wrong.  Want size, not height.
-                                int val = MIN(cutoff[stat] - lo, subcells);
+                                val = MIN(cutoff[stat], hi) - val;
                                 if (val > topVal[0]) {
                                         topStat[1] = topStat[0];
                                         topVal[1] = topVal[0];
@@ -749,14 +749,13 @@ ui_compute_bars(struct cpustats *delta)
 
                         // Order the segments by stat so we put the
                         // earlier stat on the bottom
-                        int usedSubcells = topVal[0];
                         if (topStat[0] > topStat[1]) {
                                 SWAP(topStat[0], topStat[1]);
                                 SWAP(topVal[0], topVal[1]);
                         }
 
                         // Re-scale and choose a split
-                        int cell = topVal[0] * NCHARS / usedSubcells;
+                        int cell = topVal[0] * NCHARS / (topVal[0] + topVal[1]);
 
                         // Fill the cell
                         if (cell == NCHARS - 1) {
