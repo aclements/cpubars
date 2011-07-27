@@ -95,7 +95,7 @@ read_all(const char *path)
         long len = ftell(fp);
         char *buf = malloc(len + 1);
         if (!buf)
-                epanic("out of memory");
+                epanic("read_all");
         rewind(fp);
         size_t rlen = fread(buf, 1, len, fp);
         if ((errno = ferror(fp)))
@@ -179,7 +179,7 @@ cpustats_init(void)
         // Allocate a big buffer to read /proc/stat in to
         cpustats_buf_size = cpustats_cpus * 128;
         if (!(cpustats_buf = malloc(cpustats_buf_size)))
-                epanic("out of memory");
+                epanic("allocating cpustats file buffer");
 }
 
 void
@@ -199,11 +199,11 @@ cpustats_alloc(void)
 {
         struct cpustats *res = malloc(sizeof *res);
         if (!res)
-                epanic("out of memory");
+                epanic("allocating cpustats");
         memset(res, 0, sizeof *res);
         res->cpus = malloc(cpustats_cpus * sizeof *res->cpus);
         if (!res->cpus)
-                epanic("out of memory");
+                epanic("allocating per-CPU cputats");
         memset(res->cpus, 0, cpustats_cpus * sizeof *res->cpus);
         return res;
 }
@@ -500,7 +500,7 @@ ui_init_panes(int n)
         free(ui_panes);
         ui_num_panes = n;
         if (!(ui_panes = malloc(n * sizeof *ui_panes)))
-                epanic("out of memory");
+                epanic("allocating panes");
         
 }
 
@@ -530,7 +530,7 @@ ui_layout(struct cpustats *cpus)
         ui_num_bars = cpus->online + 1;
         ui_bars = malloc(ui_num_bars * sizeof *ui_bars);
         if (!ui_bars)
-                epanic("out of memory");
+                epanic("allocating bars");
 
         // Create average bar
         ui_bars[0].start = 0;
@@ -601,11 +601,11 @@ ui_layout(struct cpustats *cpus)
         free(ui_back);
         ui_bar_width = ui_bars[ui_num_bars-1].start + ui_bars[ui_num_bars-1].width;
         if (!(ui_display = malloc(ui_bar_length * ui_bar_width)))
-                epanic("out of memory");
+                epanic("allocating display buffer");
         if (!(ui_fore = malloc(ui_bar_length * ui_bar_width)))
-                epanic("out of memory");
+                epanic("allocating foreground buffer");
         if (!(ui_back = malloc(ui_bar_length * ui_bar_width)))
-                epanic("out of memory");
+                epanic("allocating background buffer");
 
         if (ui_ascii) {
                 // ui_display and ui_fore don't change in ASCII mode
@@ -620,7 +620,7 @@ ui_layout(struct cpustats *cpus)
         // Draw labels
         char *label_buf = malloc(ui_bar_width * label_len);
         if (!label_buf)
-                epanic("out of memory");
+                epanic("allocating label buffer");
         memset(label_buf, ' ', ui_bar_width * label_len);
         int bar;
         for (bar = 0; bar < ui_num_bars; ++bar) {
