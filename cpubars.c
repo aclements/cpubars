@@ -441,12 +441,17 @@ static char ui_chars[NCHARS][MB_LEN_MAX];
 static bool ui_ascii;
 
 void
-ui_init(void)
+ui_init(bool force_ascii)
 {
         // Cell character 0 is always a space
         strcpy(ui_chars[0], " ");
 
 #ifdef __STDC_ISO_10646__
+        if (force_ascii) {
+                ui_ascii = true;
+                return;
+        }
+
         // Encode Unicode cell characters using system locale
         char *origLocale = setlocale(LC_CTYPE, NULL);
         setlocale(LC_CTYPE, "");
@@ -779,8 +784,51 @@ on_sigint(int sig)
 }
 
 int
-main(int argc, char **arv)
+main(int argc, char **argv)
 {
+        bool force_ascii = false;
+        int delay = 1000;
+
+        int opt;
+        while ((opt = getopt(argc, argv, "ad:h")) != -1) {
+                switch (opt) {
+                case 'a':
+                        force_ascii = true;
+                        break;
+                case 'd':
+                {
+                        char *end;
+                        float val = strtof(optarg, &end);
+                        if (*end) {
+                                fprintf(stderr, "Delay argument (-d) requires "
+                                        "a number\n");
+                                exit(2);
+                        }
+                        delay = 1000 * val;
+                        break;
+                }
+                default:
+                        fprintf(stderr, "Usage: %s [-a] [-d delay]\n", argv[0]);
+                        if (opt == 'h') {
+                                fprintf(stderr,
+                                        "\n"
+                                        "Display CPU usage as a bar chart.\n"
+                                        "\n"
+                                        "Options:\n"
+                                        "  -a       Use ASCII-only bars (instead of Unicode)\n"
+                                        "  -d SECS  Specify delay between updates (decimals accepted)\n"
+                                        "\n"
+                                        "If your bars look funky, use -a or specify LANG=C.\n");
+                                exit(0);
+                        }
+                        exit(2);
+                }
+        }
+        if (optind < argc) {
+                fprintf(stderr, "Unexpected arguments\n");
+                exit(2);
+        }
+
         struct sigaction sa = {
                 .sa_handler = on_sigint
         };
@@ -788,7 +836,7 @@ main(int argc, char **arv)
 
         cpustats_init();
         term_init();
-        ui_init();
+        ui_init(force_ascii);
 
         struct cpustats *before = cpustats_alloc(),
                 *after = cpustats_alloc(),
@@ -805,7 +853,7 @@ main(int argc, char **arv)
                         .fd = 0,
                         .events = POLLIN
                 };
-                if (poll(&pollfd, 1, 1000) < 0 && errno != EINTR)
+                if (poll(&pollfd, 1, delay) < 0 && errno != EINTR)
                         epanic("poll failed");
                 if (pollfd.revents & POLLIN) {
                         char ch = 0;
