@@ -673,13 +673,14 @@ ui_compute_bars(struct cpustats *delta)
 
                         // Order the segments by stat so we put the
                         // earlier stat on the bottom
+                        int usedSubcells = topVal[0];
                         if (topStat[0] > topStat[1]) {
                                 SWAP(topStat[0], topStat[1]);
                                 SWAP(topVal[0], topVal[1]);
                         }
 
                         // Re-scale and choose a split
-                        int cell = topVal[0] * NCHARS / (topVal[0] + topVal[1]);
+                        int cell = topVal[0] * NCHARS / usedSubcells;
 
                         // Fill the cell
                         if (cell == NCHARS - 1) {
