@@ -507,7 +507,7 @@ ui_layout(struct cpustats *cpus)
 
         if ((length + 1) * cpus->online < w) {
                 // Lay out and draw labels horizontally
-                ui_bar_length = LINES - 2;
+                ui_bar_length = LINES - 3;
                 putp(tiparm(cursor_address, LINES, 0));
                 printf("avg");
                 int bar = 1;
@@ -523,7 +523,7 @@ ui_layout(struct cpustats *cpus)
         } else {
                 // Lay out the labels vertically
                 int pad = 0, count = cpus->online;
-                ui_bar_length = LINES - 1 - length;
+                ui_bar_length = LINES - 2 - length;
                 if (cpus->online * 2 < w) {
                         // We have space for padding
                         pad = 1;
@@ -715,7 +715,7 @@ ui_show_bars(void)
         int row, col;
         int lastBack = -1, lastFore = -1;
         for (row = 0; row < ui_bar_length; row++) {
-                putp(tiparm(cursor_address, ui_bar_length - row, 0));
+                putp(tiparm(cursor_address, ui_bar_length - row + 1, 0));
 
                 // What's the width of this row?  Beyond this, we can
                 // just clear the line.
