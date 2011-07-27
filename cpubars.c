@@ -434,7 +434,7 @@ static int ui_bar_length, ui_bar_width;
 // ui_fore and ui_back store color codes or 0xff for default
 // attributes.
 static unsigned char *ui_display, *ui_fore, *ui_back;
-#define UIXY(array, barpos, len) (array[barpos*ui_bar_length + len])
+#define UIXY(array, barpos, len) (array[(barpos)*ui_bar_length + (len)])
 
 #define NCHARS 8
 static char ui_chars[NCHARS][MB_LEN_MAX];
