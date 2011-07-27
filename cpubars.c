@@ -3,6 +3,9 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <langinfo.h>
+#include <limits.h>
+#include <locale.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -13,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #include <curses.h>
 #include <term.h>
@@ -422,25 +426,38 @@ int bar_length, bar_maxpos;
 unsigned char *ui_display, *ui_fore, *ui_back;
 #define UIXY(array, barpos, len) (array[barpos*bar_length + len])
 
-#define NCHARS 10
-char cell_chars[NCHARS][4];
+#define NCHARS 8
+char cell_chars[NCHARS][MB_LEN_MAX];
+bool ui_ascii;
 
 void
 ui_init(void)
 {
-        // XXX Check if locale supports UTF-8
-        // XXX Fall back to ASCII bars
-        // UTF-8 encode cell characters
+        // Cell character 0 is always a space
+        strcpy(cell_chars[0], " ");
+
+#ifdef __STDC_ISO_10646__
+        // Encode Unicode cell characters using system locale
+        char *origLocale = setlocale(LC_CTYPE, NULL);
+        setlocale(LC_CTYPE, "");
+
         int ch;
-        for (ch = 0; ch < NCHARS; ch++) {
-                if (ch == 0 || ch == NCHARS - 1) {
-                        strcpy(cell_chars[ch], " ");
-                } else {
-                        // \u2581 - \u2589
-                        strcpy(cell_chars[ch], "\xe2\x96\x80");
-                        cell_chars[ch][2] += ch;
+        mbstate_t mbs;
+        memset(&mbs, 0, sizeof mbs);
+        for (ch = 1; ch < NCHARS; ch++) {
+                int len = wcrtomb(cell_chars[ch], 0x2580 + ch, &mbs);
+                if (len == -1 || !mbsinit(&mbs)) {
+                        ui_ascii = true;
+                        break;
                 }
+                cell_chars[ch][len] = 0;
         }
+
+        // Restore the original locale
+        setlocale(LC_CTYPE, origLocale);
+#else
+        ui_ascii = true;
+#endif
 }
 
 void
@@ -542,6 +559,12 @@ ui_layout(struct cpustats *cpus)
                 epanic("out of memory");
         if (!(ui_back = malloc(bar_length * bar_maxpos)))
                 epanic("out of memory");
+
+        if (ui_ascii) {
+                // ui_display and ui_fore don't change in ASCII mode
+                memset(ui_display, 0, bar_length * bar_maxpos);
+                memset(ui_fore, 0xff, bar_length * bar_maxpos);
+        }
 }
 
 void
@@ -561,9 +584,11 @@ ui_show_load(float load[3])
 void
 ui_compute_bars(struct cpustats *delta)
 {
-        // XXX ui_display and ui_fore are fixed with ASCII-only bars
-        memset(ui_display, 0, bar_length * bar_maxpos);
-        memset(ui_fore, 0xff, bar_length * bar_maxpos);
+        if (!ui_ascii) {
+                // ui_display and ui_fore are only used in Unicode mode
+                memset(ui_display, 0, bar_length * bar_maxpos);
+                memset(ui_fore, 0xff, bar_length * bar_maxpos);
+        }
         memset(ui_back, 0xff, bar_length * bar_maxpos);
 
         int i, bar;
@@ -627,6 +652,14 @@ ui_compute_bars(struct cpustats *delta)
                         if (topVal[0] == -1 || topVal[1] == -1)
                                 panic("bug: topVal={%d,%d}",
                                       topVal[0], topVal[1]);
+
+                        if (ui_ascii) {
+                                // We only care about the biggest
+                                // cover
+                                UIXY(ui_back, barpos, len) =
+                                        stat_info[topStat[0]].color;
+                                continue;
+                        }
 
                         // Order the segments by stat so we put the
                         // earlier stat on the bottom
