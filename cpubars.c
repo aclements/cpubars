@@ -177,7 +177,7 @@ cpustats_init(void)
         free(poss);
 
         // Allocate a big buffer to read /proc/stat in to
-        cpustats_buf_size = cpustats_cpus * 256;
+        cpustats_buf_size = cpustats_cpus * 128;
         if (!(cpustats_buf = malloc(cpustats_buf_size)))
                 epanic("out of memory");
 }
