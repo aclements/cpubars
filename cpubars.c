@@ -725,9 +725,10 @@ ui_compute_bars(struct cpustats *delta)
                         // the most
                         int topStat[2] = {0, 0};
                         int topVal[2] = {-1, -1};
-                        int val = lo;
+                        int val, prev = lo;
                         for (; stat < NSTATS + 1; stat++) {
-                                val = MIN(cutoff[stat], hi) - val;
+                                val = MIN(cutoff[stat], hi) - prev;
+                                prev = cutoff[stat];
                                 if (val > topVal[0]) {
                                         topStat[1] = topStat[0];
                                         topVal[1] = topVal[0];
