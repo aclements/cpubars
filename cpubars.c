@@ -191,13 +191,13 @@ cpustats_init(void)
 void
 cpustats_loadavg(float load[3])
 {
-        if ((lseek(cpustats_load_fd, 0, SEEK_SET)) < 0)
-                epanic("failed to seek /proc/loadavg");
         if ((readn_str(cpustats_load_fd, cpustats_buf, cpustats_buf_size)) < 0)
                 epanic("failed to read /proc/loadavg");
         if (sscanf(cpustats_buf, "%f %f %f",
                    &load[0], &load[1], &load[2]) != 3)
                 epanic("failed to parse /proc/loadavg");
+        if ((lseek(cpustats_load_fd, 0, SEEK_SET)) < 0)
+                epanic("failed to seek /proc/loadavg");
 }
 
 struct cpustats*
@@ -225,8 +225,6 @@ cpustats_read(struct cpustats *out)
         for (i = 0; i < cpustats_cpus; i++)
                 out->cpus[i].online = false;
 
-        if ((lseek(cpustats_fd, 0, SEEK_SET)) < 0)
-                epanic("failed to seek /proc/stat");
         if ((readn_str(cpustats_fd, cpustats_buf, cpustats_buf_size)) < 0)
                 epanic("failed to read /proc/stat");
 
@@ -270,6 +268,9 @@ cpustats_read(struct cpustats *out)
                         pos++;
                 if (*pos) pos++;
         }
+
+        if ((lseek(cpustats_fd, 0, SEEK_SET)) < 0)
+                epanic("failed to seek /proc/stat");
 }
 
 static bool
