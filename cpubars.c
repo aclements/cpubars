@@ -225,11 +225,12 @@ cpustats_read(struct cpustats *out)
         for (i = 0; i < cpustats_cpus; i++)
                 out->cpus[i].online = false;
 
+        out->online = out->max = 0;
+        out->real = time_usec() * sysconf(_SC_CLK_TCK) / 1000000;
+
         if ((readn_str(cpustats_fd, cpustats_buf, cpustats_buf_size)) < 0)
                 epanic("failed to read /proc/stat");
 
-        out->online = out->max = 0;
-        out->real = time_usec() * sysconf(_SC_CLK_TCK) / 1000000;
         char *pos = cpustats_buf;
         while (strncmp(pos, "cpu", 3) == 0) {
                 pos += 3;
