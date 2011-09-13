@@ -663,9 +663,13 @@ void
 ui_show_load(float load[3])
 {
         char buf[1024];
+        int pos;
         snprintf(buf, sizeof buf, "%0.2f %0.2f %0.2f",
                  load[0], load[1], load[2]);
-        putp(tiparm(cursor_address, 0, COLS - strlen(buf) - 8));
+        pos = COLS - strlen(buf) - 8;
+        if (pos < 0)
+                pos = 0;
+        putp(tiparm(cursor_address, 0, pos));
         putp(exit_attribute_mode);
         putp(tiparm(set_a_foreground, COLOR_WHITE));
         printf("  load: ");
