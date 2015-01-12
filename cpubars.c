@@ -672,9 +672,9 @@ ui_show_load(float load[3])
         putp(tiparm(cursor_address, 0, pos));
         putp(exit_attribute_mode);
         putp(tiparm(set_a_foreground, COLOR_WHITE));
-        printf("  load: ");
+        puts("  load: ");
         putp(exit_attribute_mode);
-        printf(buf);
+        puts(buf);
 }
 
 void
