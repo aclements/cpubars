@@ -22,6 +22,11 @@
 #include <curses.h>
 #include <term.h>
 
+#ifdef __FreeBSD__
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
+
 /******************************************************************
  * Utilities
  */
@@ -170,18 +175,61 @@ static int cpustats_cpus;
 static char *cpustats_buf;
 static int cpustats_buf_size;
 
+static const char *proc_path = NULL;
+
+void
+cpustats_findproc(void)
+{
+        // A list of paths to try to find a Linux-ish /proc mount at.
+#define NUM_CAND_PROC_PATHS 2
+        const char *cand_proc_paths[NUM_CAND_PROC_PATHS] =
+                { "/proc",
+                  "/compat/linux/proc" };
+
+        // Look for a "stat" file as an indicator that we have a Linuxy procfs
+        // available as opposed to some other procfs that has no "stat" file.
+        int i;
+        for (i=0; i<NUM_CAND_PROC_PATHS; i++) {
+                int proc_fd;
+                if ((proc_fd = open(cand_proc_paths[i], O_RDONLY)) < 0)
+                        continue;
+                if ((cpustats_fd = openat(proc_fd, "stat", O_RDONLY)) < 0) {
+                        close(proc_fd);
+                        continue;
+                }
+                if ((cpustats_load_fd = openat(proc_fd, "loadavg", O_RDONLY)) < 0) {
+                        close(proc_fd);
+                        close(cpustats_fd);
+                        continue;
+                }
+                close(proc_fd);
+                proc_path = cand_proc_paths[i];
+        }
+
+        if (proc_path == NULL) {
+                fprintf(stderr, "checked procfs candidates:\n");
+                int i;
+                for (i=0; i<NUM_CAND_PROC_PATHS; i++)
+                        fprintf(stderr, "\t%s\n", cand_proc_paths[i]);
+                panic("failed to locate a suitable procfs with stat/loadavg");
+        }
+}
+
 void
 cpustats_init(void)
 {
-        if ((cpustats_fd = open("/proc/stat", O_RDONLY)) < 0)
-                epanic("failed to open /proc/stat");
-        if ((cpustats_load_fd = open("/proc/loadavg", O_RDONLY)) < 0)
-                epanic("failed to open /proc/loadavg");
+        cpustats_findproc();
 
         // Find the maximum number of CPU's we'll need
+#ifdef __FreeBSD__
+        size_t oldlenp = sizeof(cpustats_cpus);
+        if (sysctlbyname("kern.smp.maxcpus", &cpustats_cpus, &oldlenp, NULL, 0))
+                epanic("failed to read kern.smp.maxcpus sysctl");
+#else
         char *poss = read_all("/sys/devices/system/cpu/possible");
         cpustats_cpus = cpuset_max(poss) + 1;
         free(poss);
+#endif //__FreeBSD__
 
         // Allocate a big buffer to read /proc/stat in to
         cpustats_buf_size = cpustats_cpus * 128;
@@ -193,12 +241,12 @@ void
 cpustats_loadavg(float load[3])
 {
         if ((readn_str(cpustats_load_fd, cpustats_buf, cpustats_buf_size)) < 0)
-                epanic("failed to read /proc/loadavg");
+                epanic("failed to read %s/loadavg", proc_path);
         if (sscanf(cpustats_buf, "%f %f %f",
                    &load[0], &load[1], &load[2]) != 3)
-                epanic("failed to parse /proc/loadavg");
+                epanic("failed to parse %s/loadavg", proc_path);
         if ((lseek(cpustats_load_fd, 0, SEEK_SET)) < 0)
-                epanic("failed to seek /proc/loadavg");
+                epanic("failed to seek %s/loadavg", proc_path);
 }
 
 struct cpustats*
@@ -230,7 +278,7 @@ cpustats_read(struct cpustats *out)
         out->real = time_usec() * sysconf(_SC_CLK_TCK) / 1000000;
 
         if ((readn_str(cpustats_fd, cpustats_buf, cpustats_buf_size)) < 0)
-                epanic("failed to read /proc/stat");
+                epanic("failed to read %s/stat", proc_path);
 
         char *pos = cpustats_buf;
         while (strncmp(pos, "cpu", 3) == 0) {
@@ -272,7 +320,7 @@ cpustats_read(struct cpustats *out)
         }
 
         if ((lseek(cpustats_fd, 0, SEEK_SET)) < 0)
-                epanic("failed to seek /proc/stat");
+                epanic("failed to seek %s/stat", proc_path);
 }
 
 static bool
