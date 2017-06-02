@@ -323,7 +323,7 @@ cpustats_read(struct cpustats *out)
                 epanic("failed to seek %s/stat", proc_path);
 }
 
-static bool
+static void
 cpustats_subtract1(struct cpustat *out,
                    const struct cpustat *a, const struct cpustat *b)
 {
