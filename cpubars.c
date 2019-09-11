@@ -329,7 +329,7 @@ cpustats_subtract1(struct cpustat *out,
 {
         out->online = a->online && b->online;
         if (out->online) {
-#define SUB(field) out->field = a->field - b->field
+#define SUB(field) out->field = a->field >= b->field ? a->field - b->field : 0
                 SUB(user);
                 SUB(nice);
                 SUB(sys);
